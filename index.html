@@ -49,8 +49,7 @@
         const response = await fetch("./view_dipper_beringt.csv");
         const text = await response.text();
 
-        const lines = text.split("
-").filter(l => l.trim() !== "");
+        const lines = text.split("\n").filter(l => l.trim() !== "");
         if (lines.length === 0) {
           document.getElementById("output").textContent = "CSV empty.";
           return;
@@ -58,7 +57,7 @@
 
         // detect delimiter (tab, semicolon, or comma)
         let delimiter = ',';
-        if (lines[0].includes("	")) delimiter = "	";
+        if (lines[0].includes("\t")) delimiter = "\t";
         else if (lines[0].includes(";")) delimiter = ";";
 
         const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase());
@@ -71,17 +70,17 @@
 
           const row = {};
           headers.forEach((h, idx) => {
-            const key = h.trim().toLowerCase();
-            row[key] = cols[idx]?.trim().toLowerCase();
+            row[h] = cols[idx]?.trim().toLowerCase();
           });
 
           const river = cleanRiver(row.river);
           if (!river) continue;
 
-          if (!database[river]) database[river] = [];
-
           const combo = toCombo(row);
-          if (combo) database[river].push(combo);
+          if (!combo) continue;
+
+          if (!database[river]) database[river] = [];
+          database[river].push(combo);
         }
 
         // counts
@@ -95,33 +94,8 @@
           `CSV loaded successfully.<br>${breakdown.join("<br>")}<br><b>TOTAL: ${total}</b>`;
 
       } catch (e) {
+        console.error(e);
         document.getElementById("output").textContent = "Error loading CSV (check path/server).";
-      }
-    };
-
-        for (let i = 1; i < lines.length; i++) {
-          const cols = lines[i].split(",");
-          if (cols.length < 5) continue;
-
-          const row = {};
-          headers.forEach((h, idx) => {
-            const key = h.trim().toLowerCase();
-            row[key] = cols[idx]?.trim().toLowerCase();
-          });
-
-          const river = cleanRiver(row.river);
-          if (!river) continue;
-
-          if (!database[river]) database[river] = [];
-
-          const combo = toCombo(row);
-          if (combo) database[river].push(combo);
-        }
-
-        const total = Object.values(database).reduce((sum, arr) => sum + arr.length, 0);
-        document.getElementById("output").textContent = `CSV loaded successfully. (${total} birds loaded)`;
-      } catch (e) {
-        document.getElementById("output").textContent = "Error loading CSV (check path or run via server).";
       }
     }
 
