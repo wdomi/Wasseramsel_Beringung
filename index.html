@@ -51,7 +51,6 @@ async function loadCSV(){
     const res = await fetch("./view_dipper_beringt.csv");
     let text = await res.text();
 
-    // FIXES: BOM + Windows line endings
     text = text.replace(/^\uFEFF/, '');
 
     const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
@@ -60,47 +59,47 @@ async function loadCSV(){
       return;
     }
 
-    // detect delimiter
-    let delimiter = ",";
-    if(lines[0].includes("\t")) delimiter = "\t";
-    else if(lines[0].includes(";")) delimiter = ";";
+    // 🔥 SUPER ROBUST SPLIT (handles tabs, commas, semicolons)
+    function splitLine(line){
+      return line.split(/\t|;|,/).map(x => x.trim().toLowerCase());
+    }
 
-    const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase());
+    const headers = splitLine(lines[0]);
 
     database = {};
 
     for(let i=1;i<lines.length;i++){
-      const cols = lines[i].split(delimiter);
+      const cols = splitLine(lines[i]);
       if(cols.length < 5) continue;
 
       const row = {};
-      headers.forEach((h,idx)=> row[h] = cols[idx]?.trim().toLowerCase());
+      headers.forEach((h,idx)=> row[h] = cols[idx]);
 
-      const river = cleanRiver(row.river);
+      const river = row["river"];
       if(!river) continue;
 
       const combo = toCombo(row);
       if(!combo) continue;
 
-      if(!database[river]) database[river] = [];
+      if(!database[river]) database[river]=[];
       database[river].push(combo);
     }
 
-    let total = 0;
-    let txt = "CSV loaded:<br>";
+    let total=0;
+    let txt="CSV loaded:<br>";
 
     Object.entries(database).forEach(([r,a])=>{
-      total += a.length;
-      txt += `${r}: ${a.length}<br>`;
+      total+=a.length;
+      txt+=`${r}: ${a.length}<br>`;
     });
 
-    txt += `<b>TOTAL: ${total}</b>`;
+    txt+=`<b>TOTAL: ${total}</b>`;
 
     document.getElementById("output").innerHTML = txt;
 
-  } catch(e){
+  }catch(e){
     console.error(e);
-    document.getElementById("output").textContent = "LOAD FAILED (check path / GitHub Pages)";
+    document.getElementById("output").textContent = "LOAD FAILED";
   }
 }
 
