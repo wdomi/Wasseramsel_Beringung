@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Bird Ring Combination Tool</title>
+  <style>
+    body { font-family: Arial; padding: 20px; max-width: 900px; }
+    button { padding: 10px 15px; margin-top: 10px; margin-right: 10px; }
+    .result { margin-top: 20px; font-weight: bold; }
+    .combo { margin: 5px 0; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h2>Bird Ring Combination Tool (Advanced)</h2>
+
+  <label>Select River:</label>
+  <select id="riverSelect">
+    <option>Untere Spöl</option>
+    <option>Obere Spöl</option>
+    <option>Ova dal Fuorn</option>
+    <option>Rom</option>
+    <option>Trupchun</option>
+  </select>
+
+  <br>
+  <button onclick="loadCSV()">Load CSV (auto)</button>
+  <button onclick="findBest()">Best 1</button>
+  <button onclick="generateBatch()">Best 10 (variety)</button>
+  <button onclick="addSelected()">Add selected to dataset</button>
+  <button onclick="downloadCSV()">Download updated CSV</button>
+
+  <div class="result" id="output"></div>
+
+  <script>
+    const colors = ["yellow","white","black","red","pink","violet","green","blue"];
+    let database = {};
+    let selectedCombos = [];
+
+    function cleanRiver(r) { return r?.trim(); }
+
+    function normalize(combo) { return combo.replace(/\s+/g, '').toLowerCase(); }
+
+    function toCombo(row) {
+      return normalize(`r(${row.right_top}-${row.right_bottom})l(${row.left_top}-${row.left_bottom})`);
+    }
+
+    async function loadCSV() {
+      const response = await fetch("view_dipper_beringt.csv");
+      const text = await response.text();
+
+      const lines = text.split("\n");
+      const headers = lines[0].split(",");
+
+      database = {};
+
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(",");
+        if (cols.length < 5) continue;
+
+        const row = {};
+        headers.forEach((h, idx) => row[h.trim()] = cols[idx]?.trim().toLowerCase());
+
+        const river = cleanRiver(row.river);
+        if (!database[river]) database[river] = [];
+
+        database[river].push(toCombo(row));
+      }
+
+      document.getElementById("output").textContent = "CSV loaded.";
+    }
+
+    function parse(combo) {
+      return combo.match(/\((.*?)\)/g)
+        .map(x => x.replace(/[()]/g, '').split('-')).flat();
+    }
+
+    function generateAllCombos() {
+      const combos = [];
+
+      for (let r1 of ["alu", ...colors])
+        for (let r2 of colors)
+          for (let l1 of colors)
+            for (let l2 of colors) {
+
+              const arr = [r1, r2, l1, l2];
+              const aluCount = arr.filter(x => x === "alu").length;
+              if (aluCount !== 1) continue;
+
+              combos.push(`r(${r1}-${r2})l(${l1}-${l2})`);
+            }
+
+      return combos;
+    }
+
+    function similarity(c1, c2) {
+      const a = parse(c1);
+      const b = parse(c2);
+
+      let score = 0;
+      for (let i = 0; i < 4; i++) if (a[i] === b[i]) score += 3;
+      a.forEach(color => { if (b.includes(color)) score += 1; });
+      if (a[0] === b[2] && a[1] === b[3]) score += 2;
+      if (a[2] === b[0] && a[3] === b[1]) score += 2;
+
+      return score;
+    }
+
+    function colorSpan(color) {
+      return `<span style="color:${color === 'white' ? '#999' : color}">${color.toUpperCase()}</span>`;
+    }
+
+    function formatCombo(combo, index) {
+      const p = parse(combo);
+      return `
+        <div class="combo">
+          <input type="checkbox" onchange="toggleSelect('${combo}', this.checked)">
+          R: ${colorSpan(p[0])}-${colorSpan(p[1])} | L: ${colorSpan(p[2])}-${colorSpan(p[3])}
+        </div>`;
+    }
+
+    function toggleSelect(combo, checked) {
+      if (checked) {
+        selectedCombos.push(combo);
+      } else {
+        selectedCombos = selectedCombos.filter(c => c !== combo);
+      }
+    }
+
+    function findCandidates(localUsed, allUsed, allCombos) {
+      let scored = [];
+
+      allCombos.forEach(combo => {
+        if (allUsed.includes(combo)) return;
+
+        let worst = 0;
+        localUsed.forEach(existing => {
+          const sim = similarity(combo, existing);
+          if (sim > worst) worst = sim;
+        });
+
+        scored.push({ combo, score: worst });
+      });
+
+      scored.sort((a,b) => a.score - b.score);
+      return scored.slice(0, 50);
+    }
+
+    function findBest() {
+      const river = document.getElementById("riverSelect").value;
+      const allUsed = Object.values(database).flat();
+      const localUsed = database[river] || [];
+      const allCombos = generateAllCombos();
+
+      const candidates = findCandidates(localUsed, allUsed, allCombos);
+
+      document.getElementById("output").innerHTML =
+        "BEST OPTIONS:<br>" + candidates.slice(0,5).map((c,i) => formatCombo(c.combo,i)).join("");
+    }
+
+    function generateBatch() {
+      const river = document.getElementById("riverSelect").value;
+      const allUsed = Object.values(database).flat();
+      const localUsed = database[river] || [];
+      const allCombos = generateAllCombos();
+
+      const candidates = findCandidates(localUsed, allUsed, allCombos);
+      const shuffled = candidates.sort(() => Math.random() - 0.5);
+      const selected = shuffled.slice(0, 10);
+
+      document.getElementById("output").innerHTML =
+        "10 OPTIONS:<br>" + selected.map((c,i) => formatCombo(c.combo,i)).join("");
+    }
+
+    function addSelected() {
+      const river = document.getElementById("riverSelect").value;
+      if (!database[river]) database[river] = [];
+
+      selectedCombos.forEach(c => {
+        database[river].push(c);
+      });
+
+      alert(selectedCombos.length + " combinations added to " + river);
+      selectedCombos = [];
+    }
+
+    function downloadCSV() {
+      let csv = "river,right_top,right_bottom,left_top,left_bottom\n";
+
+      Object.entries(database).forEach(([river, combos]) => {
+        combos.forEach(c => {
+          const p = parse(c);
+          csv += `${river},${p[0]},${p[1]},${p[2]},${p[3]}\n`;
+        });
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'updated_dataset.csv';
+      a.click();
+
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>
