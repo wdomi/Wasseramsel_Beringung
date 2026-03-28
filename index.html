@@ -66,7 +66,7 @@
           const row = {};
           headers.forEach((h, idx) => row[h.trim()] = cols[idx]?.trim().toLowerCase());
 
-          const river = row.river;
+          const river = row.river?.trim();
           if (!database[river]) database[river] = [];
 
           database[river].push(toCombo(row));
@@ -153,7 +153,7 @@
     }
 
     function findBest() {
-      const river = document.getElementById("riverSelect").value.toLowerCase();
+      const river = document.getElementById("riverSelect").value;
       const allUsed = Object.values(database).flat();
       const localUsed = database[river] || [];
       const allCombos = generateAllCombos();
@@ -169,7 +169,7 @@
     }
 
     function generateBatch() {
-      const river = document.getElementById("riverSelect").value.toLowerCase();
+      const river = document.getElementById("riverSelect").value;
       let allUsed = Object.values(database).flat();
       let localUsed = [...(database[river] || [])];
       const allCombos = generateAllCombos();
