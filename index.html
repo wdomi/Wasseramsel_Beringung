@@ -56,10 +56,12 @@
           return;
         }
 
-        // detect delimiter (comma or semicolon)
-        const delimiter = lines[0].includes(";") ? ";" : ",";
+        // detect delimiter (tab, semicolon, or comma)
+        let delimiter = ',';
+        if (lines[0].includes("	")) delimiter = "	";
+        else if (lines[0].includes(";")) delimiter = ";";
 
-        const headers = lines[0].split(delimiter);
+        const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase());
 
         database = {};
 
