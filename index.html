@@ -11,219 +11,224 @@
   </style>
 </head>
 <body>
-  <h2>Bird Ring Combination Tool (Advanced)</h2>
 
-  <label>Select River:</label>
-  <select id="riverSelect">
-    <option>Untere Spöl</option>
-    <option>Obere Spöl</option>
-    <option>Ova dal Fuorn</option>
-    <option>Rom</option>
-    <option>Trupchun</option>
-  </select>
+<h2>Bird Ring Combination Tool (Advanced)</h2>
 
-  <br>
-  <button onclick="loadCSV()">Load CSV (auto)</button>
-  <button onclick="findBest()">Best 1</button>
-  <button onclick="generateBatch()">Best 10 (variety)</button>
-  <button onclick="addSelected()">Add selected to dataset</button>
-  <button onclick="downloadCSV()">Download updated CSV</button>
+<label>Select River:</label>
+<select id="riverSelect">
+  <option>Untere Spöl</option>
+  <option>Obere Spöl</option>
+  <option>Ova dal Fuorn</option>
+  <option>Rom</option>
+  <option>Trupchun</option>
+</select>
 
-  <div class="result" id="output"></div>
+<br>
+<button onclick="loadCSV()">Load CSV (auto)</button>
+<button onclick="findBest()">Best 1</button>
+<button onclick="generateBatch()">Best 10</button>
+<button onclick="addSelected()">Add selected</button>
+<button onclick="downloadCSV()">Download CSV</button>
+<button onclick="showData()">Show loaded birds</button>
 
-  <script>
-    const colors = ["yellow","white","black","red","pink","violet","green","blue"];
-    let database = {};
-    let selectedCombos = [];
+<div class="result" id="output"></div>
 
-    function cleanRiver(r) { return r?.trim(); }
-    function normalize(combo) { return combo.replace(/\s+/g, '').toLowerCase(); }
+<script>
+const colors = ["yellow","white","black","red","pink","violet","green","blue"];
+let database = {};
+let selectedCombos = [];
 
-    function toCombo(row) {
-      if (!row.right_top || !row.right_bottom || !row.left_top || !row.left_bottom) return null;
-      return normalize(`r(${row.right_top}-${row.right_bottom})l(${row.left_top}-${row.left_bottom})`);
+function cleanRiver(r){ return r?.trim(); }
+function normalize(c){ return c.replace(/\s+/g,'').toLowerCase(); }
+
+function toCombo(row){
+  if(!row.right_top || !row.right_bottom || !row.left_top || !row.left_bottom) return null;
+  return normalize(`r(${row.right_top}-${row.right_bottom})l(${row.left_top}-${row.left_bottom})`);
+}
+
+async function loadCSV(){
+  try{
+    const res = await fetch("./view_dipper_beringt.csv");
+    let text = await res.text();
+
+    // FIXES: BOM + Windows line endings
+    text = text.replace(/^\uFEFF/, '');
+
+    const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
+    if(lines.length === 0){
+      document.getElementById("output").textContent = "CSV empty";
+      return;
     }
 
-    async function loadCSV() {
-      try {
-        const response = await fetch("./view_dipper_beringt.csv");
-        const text = await response.text();
+    // detect delimiter
+    let delimiter = ",";
+    if(lines[0].includes("\t")) delimiter = "\t";
+    else if(lines[0].includes(";")) delimiter = ";";
 
-        const lines = text.split("\n").filter(l => l.trim() !== "");
-        if (lines.length === 0) {
-          document.getElementById("output").textContent = "CSV empty.";
-          return;
-        }
+    const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase());
 
-        // detect delimiter (tab, semicolon, or comma)
-        let delimiter = ',';
-        if (lines[0].includes("\t")) delimiter = "\t";
-        else if (lines[0].includes(";")) delimiter = ";";
+    database = {};
 
-        const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase());
+    for(let i=1;i<lines.length;i++){
+      const cols = lines[i].split(delimiter);
+      if(cols.length < 5) continue;
 
-        database = {};
+      const row = {};
+      headers.forEach((h,idx)=> row[h] = cols[idx]?.trim().toLowerCase());
 
-        for (let i = 1; i < lines.length; i++) {
-          const cols = lines[i].split(delimiter);
-          if (cols.length < 5) continue;
+      const river = cleanRiver(row.river);
+      if(!river) continue;
 
-          const row = {};
-          headers.forEach((h, idx) => {
-            row[h] = cols[idx]?.trim().toLowerCase();
-          });
+      const combo = toCombo(row);
+      if(!combo) continue;
 
-          const river = cleanRiver(row.river);
-          if (!river) continue;
-
-          const combo = toCombo(row);
-          if (!combo) continue;
-
-          if (!database[river]) database[river] = [];
-          database[river].push(combo);
-        }
-
-        // counts
-        let total = 0;
-        let breakdown = Object.entries(database).map(([river, arr]) => {
-          total += arr.length;
-          return `${river}: ${arr.length}`;
-        });
-
-        document.getElementById("output").innerHTML =
-          `CSV loaded successfully.<br>${breakdown.join("<br>")}<br><b>TOTAL: ${total}</b>`;
-
-      } catch (e) {
-        console.error(e);
-        document.getElementById("output").textContent = "Error loading CSV (check path/server).";
-      }
+      if(!database[river]) database[river] = [];
+      database[river].push(combo);
     }
 
-    function parse(combo) {
-      return combo.match(/\((.*?)\)/g)
-        .map(x => x.replace(/[()]/g, '').split('-')).flat();
-    }
+    let total = 0;
+    let txt = "CSV loaded:<br>";
 
-    function generateAllCombos() {
-      const combos = [];
+    Object.entries(database).forEach(([r,a])=>{
+      total += a.length;
+      txt += `${r}: ${a.length}<br>`;
+    });
 
-      for (let r1 of ["alu", ...colors])
-        for (let r2 of colors)
-          for (let l1 of colors)
-            for (let l2 of colors) {
+    txt += `<b>TOTAL: ${total}</b>`;
 
-              const arr = [r1, r2, l1, l2];
-              if (arr.filter(x => x === "alu").length !== 1) continue;
+    document.getElementById("output").innerHTML = txt;
 
-              combos.push(`r(${r1}-${r2})l(${l1}-${l2})`);
-            }
+  } catch(e){
+    console.error(e);
+    document.getElementById("output").textContent = "LOAD FAILED (check path / GitHub Pages)";
+  }
+}
 
-      return combos;
-    }
+function parse(c){
+  return c.match(/\((.*?)\)/g)
+    .map(x=>x.replace(/[()]/g,'').split('-')).flat();
+}
 
-    function similarity(c1, c2) {
-      const a = parse(c1);
-      const b = parse(c2);
+function generateAllCombos(){
+  const out=[];
+  for(let r1 of ["alu",...colors])
+  for(let r2 of colors)
+  for(let l1 of colors)
+  for(let l2 of colors){
+    const arr=[r1,r2,l1,l2];
+    if(arr.filter(x=>x==="alu").length!==1) continue;
+    out.push(`r(${r1}-${r2})l(${l1}-${l2})`);
+  }
+  return out;
+}
 
-      let score = 0;
-      for (let i = 0; i < 4; i++) if (a[i] === b[i]) score += 3;
-      a.forEach(color => { if (b.includes(color)) score += 1; });
-      if (a[0] === b[2] && a[1] === b[3]) score += 2;
-      if (a[2] === b[0] && a[3] === b[1]) score += 2;
+function similarity(a,b){
+  const x=parse(a), y=parse(b);
+  let s=0;
+  for(let i=0;i<4;i++) if(x[i]===y[i]) s+=3;
+  x.forEach(c=>{ if(y.includes(c)) s+=1; });
+  if(x[0]===y[2] && x[1]===y[3]) s+=2;
+  if(x[2]===y[0] && x[3]===y[1]) s+=2;
+  return s;
+}
 
-      return score;
-    }
+function colorSpan(c){
+  return `<span style="color:${c==='white'?'#999':c}">${c.toUpperCase()}</span>`;
+}
 
-    function colorSpan(color) {
-      return `<span style="color:${color === 'white' ? '#999' : color}">${color.toUpperCase()}</span>`;
-    }
+function formatCombo(c){
+  const p=parse(c);
+  return `<div class="combo">
+    <input type="checkbox" onchange="toggleSelect('${c}',this.checked)">
+    R: ${colorSpan(p[0])}-${colorSpan(p[1])} | L: ${colorSpan(p[2])}-${colorSpan(p[3])}
+  </div>`;
+}
 
-    function formatCombo(combo) {
-      const p = parse(combo);
-      return `<div class="combo">
-        <input type="checkbox" onchange="toggleSelect('${combo}', this.checked)">
-        R: ${colorSpan(p[0])}-${colorSpan(p[1])} | L: ${colorSpan(p[2])}-${colorSpan(p[3])}
-      </div>`;
-    }
+function toggleSelect(c,checked){
+  if(checked) selectedCombos.push(c);
+  else selectedCombos = selectedCombos.filter(x=>x!==c);
+}
 
-    function toggleSelect(combo, checked) {
-      if (checked) selectedCombos.push(combo);
-      else selectedCombos = selectedCombos.filter(c => c !== combo);
-    }
+function findCandidates(local,all,combos){
+  let scored=[];
+  combos.forEach(c=>{
+    if(all.includes(c)) return;
+    let worst=0;
+    local.forEach(e=>{
+      const sim=similarity(c,e);
+      if(sim>worst) worst=sim;
+    });
+    scored.push({combo:c,score:worst});
+  });
+  scored.sort((a,b)=>a.score-b.score);
+  return scored.slice(0,50);
+}
 
-    function findCandidates(localUsed, allUsed, allCombos) {
-      let scored = [];
+function findBest(){
+  const river=document.getElementById("riverSelect").value;
+  const all=Object.values(database).flat();
+  const local=database[river]||[];
 
-      allCombos.forEach(combo => {
-        if (allUsed.includes(combo)) return;
+  const c=findCandidates(local,all,generateAllCombos());
 
-        let worst = 0;
-        localUsed.forEach(existing => {
-          const sim = similarity(combo, existing);
-          if (sim > worst) worst = sim;
-        });
+  document.getElementById("output").innerHTML =
+    "BEST OPTIONS:<br>" + c.slice(0,5).map(x=>formatCombo(x.combo)).join("");
+}
 
-        scored.push({ combo, score: worst });
-      });
+function generateBatch(){
+  const river=document.getElementById("riverSelect").value;
+  const all=Object.values(database).flat();
+  const local=database[river]||[];
 
-      scored.sort((a,b) => a.score - b.score);
-      return scored.slice(0, 50);
-    }
+  const c=findCandidates(local,all,generateAllCombos());
+  const pick=c.sort(()=>Math.random()-0.5).slice(0,10);
 
-    function findBest() {
-      const river = document.getElementById("riverSelect").value;
-      const allUsed = Object.values(database).flat();
-      const localUsed = database[river] || [];
+  document.getElementById("output").innerHTML =
+    "10 OPTIONS:<br>" + pick.map(x=>formatCombo(x.combo)).join("");
+}
 
-      const candidates = findCandidates(localUsed, allUsed, generateAllCombos());
+function addSelected(){
+  const river=document.getElementById("riverSelect").value;
+  if(!database[river]) database[river]=[];
 
-      document.getElementById("output").innerHTML =
-        "BEST OPTIONS:<br>" + candidates.slice(0,5).map(c => formatCombo(c.combo)).join("");
-    }
+  selectedCombos.forEach(c=>database[river].push(c));
 
-    function generateBatch() {
-      const river = document.getElementById("riverSelect").value;
-      const allUsed = Object.values(database).flat();
-      const localUsed = database[river] || [];
+  alert(selectedCombos.length + " added");
+  selectedCombos=[];
+}
 
-      const candidates = findCandidates(localUsed, allUsed, generateAllCombos());
-      const shuffled = candidates.sort(() => Math.random() - 0.5);
+function downloadCSV(){
+  let csv="river,right_top,right_bottom,left_top,left_bottom,id,banded_on\n";
 
-      document.getElementById("output").innerHTML =
-        "10 OPTIONS:<br>" + shuffled.slice(0,10).map(c => formatCombo(c.combo)).join("");
-    }
+  Object.entries(database).forEach(([r,arr])=>{
+    arr.forEach(c=>{
+      const p=parse(c);
+      if(p.length!==4) return;
+      csv+=`${r},${p[0]},${p[1]},${p[2]},${p[3]},,\n`;
+    });
+  });
 
-    function addSelected() {
-      const river = document.getElementById("riverSelect").value;
-      if (!database[river]) database[river] = [];
+  const blob=new Blob([csv],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
 
-      selectedCombos.forEach(c => database[river].push(c));
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='updated_dataset.csv';
+  a.click();
 
-      alert(selectedCombos.length + " combinations added to " + river);
-      selectedCombos = [];
-    }
+  URL.revokeObjectURL(url);
+}
 
-    function downloadCSV() {
-      let csv = "river,right_top,right_bottom,left_top,left_bottom,id,banded_on\n";
+function showData(){
+  let txt="";
+  Object.entries(database).forEach(([r,arr])=>{
+    txt+=r+"\n";
+    arr.forEach(c=> txt+="  "+c+"\n");
+  });
+  if(!txt) txt="No data loaded";
+  alert(txt);
+}
+</script>
 
-      Object.entries(database).forEach(([river, combos]) => {
-        combos.forEach(c => {
-          const p = parse(c);
-          if (!p || p.length !== 4) return;
-          csv += `${river},${p[0]},${p[1]},${p[2]},${p[3]},,\n`;
-        });
-      });
-
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'updated_dataset.csv';
-      a.click();
-
-      URL.revokeObjectURL(url);
-    }
-  </script>
 </body>
 </html>
