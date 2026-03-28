@@ -37,43 +37,46 @@
     let selectedCombos = [];
 
     function cleanRiver(r) { return r?.trim(); }
-
     function normalize(combo) { return combo.replace(/\s+/g, '').toLowerCase(); }
 
     function toCombo(row) {
-      // ensure correct column names
       if (!row.right_top || !row.right_bottom || !row.left_top || !row.left_bottom) return null;
       return normalize(`r(${row.right_top}-${row.right_bottom})l(${row.left_top}-${row.left_bottom})`);
-    }-${row.right_bottom})l(${row.left_top}-${row.left_bottom})`);
     }
 
     async function loadCSV() {
-      const response = await fetch("view_dipper_beringt.csv");
-      const text = await response.text();
+      try {
+        const response = await fetch("./view_dipper_beringt.csv");
+        const text = await response.text();
 
-      const lines = text.split("\n");
-      const headers = lines[0].split(",");
+        const lines = text.split("\n");
+        const headers = lines[0].split(",");
 
-      database = {};
+        database = {};
 
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(",");
-        if (cols.length < 5) continue;
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(",");
+          if (cols.length < 5) continue;
 
-        const row = {};
-        headers.forEach((h, idx) => {
-          const key = h.trim().toLowerCase();
-          row[key] = cols[idx]?.trim().toLowerCase();
-        });
+          const row = {};
+          headers.forEach((h, idx) => {
+            const key = h.trim().toLowerCase();
+            row[key] = cols[idx]?.trim().toLowerCase();
+          });
 
-        const river = cleanRiver(row.river);
-        if (!database[river]) database[river] = [];
+          const river = cleanRiver(row.river);
+          if (!river) continue;
 
-        const combo = toCombo(row);
-        if (combo) database[river].push(combo);
+          if (!database[river]) database[river] = [];
+
+          const combo = toCombo(row);
+          if (combo) database[river].push(combo);
+        }
+
+        document.getElementById("output").textContent = "CSV loaded successfully.";
+      } catch (e) {
+        document.getElementById("output").textContent = "Error loading CSV (check path or run via server).";
       }
-
-      document.getElementById("output").textContent = "CSV loaded.";
     }
 
     function parse(combo) {
@@ -90,8 +93,7 @@
             for (let l2 of colors) {
 
               const arr = [r1, r2, l1, l2];
-              const aluCount = arr.filter(x => x === "alu").length;
-              if (aluCount !== 1) continue;
+              if (arr.filter(x => x === "alu").length !== 1) continue;
 
               combos.push(`r(${r1}-${r2})l(${l1}-${l2})`);
             }
@@ -116,21 +118,17 @@
       return `<span style="color:${color === 'white' ? '#999' : color}">${color.toUpperCase()}</span>`;
     }
 
-    function formatCombo(combo, index) {
+    function formatCombo(combo) {
       const p = parse(combo);
-      return `
-        <div class="combo">
-          <input type="checkbox" onchange="toggleSelect('${combo}', this.checked)">
-          R: ${colorSpan(p[0])}-${colorSpan(p[1])} | L: ${colorSpan(p[2])}-${colorSpan(p[3])}
-        </div>`;
+      return `<div class="combo">
+        <input type="checkbox" onchange="toggleSelect('${combo}', this.checked)">
+        R: ${colorSpan(p[0])}-${colorSpan(p[1])} | L: ${colorSpan(p[2])}-${colorSpan(p[3])}
+      </div>`;
     }
 
     function toggleSelect(combo, checked) {
-      if (checked) {
-        selectedCombos.push(combo);
-      } else {
-        selectedCombos = selectedCombos.filter(c => c !== combo);
-      }
+      if (checked) selectedCombos.push(combo);
+      else selectedCombos = selectedCombos.filter(c => c !== combo);
     }
 
     function findCandidates(localUsed, allUsed, allCombos) {
@@ -156,63 +154,43 @@
       const river = document.getElementById("riverSelect").value;
       const allUsed = Object.values(database).flat();
       const localUsed = database[river] || [];
-      const allCombos = generateAllCombos();
 
-      const candidates = findCandidates(localUsed, allUsed, allCombos);
+      const candidates = findCandidates(localUsed, allUsed, generateAllCombos());
 
       document.getElementById("output").innerHTML =
-        "BEST OPTIONS:<br>" + candidates.slice(0,5).map((c,i) => formatCombo(c.combo,i)).join("");
+        "BEST OPTIONS:<br>" + candidates.slice(0,5).map(c => formatCombo(c.combo)).join("");
     }
 
     function generateBatch() {
       const river = document.getElementById("riverSelect").value;
       const allUsed = Object.values(database).flat();
       const localUsed = database[river] || [];
-      const allCombos = generateAllCombos();
 
-      const candidates = findCandidates(localUsed, allUsed, allCombos);
+      const candidates = findCandidates(localUsed, allUsed, generateAllCombos());
       const shuffled = candidates.sort(() => Math.random() - 0.5);
-      const selected = shuffled.slice(0, 10);
 
       document.getElementById("output").innerHTML =
-        "10 OPTIONS:<br>" + selected.map((c,i) => formatCombo(c.combo,i)).join("");
+        "10 OPTIONS:<br>" + shuffled.slice(0,10).map(c => formatCombo(c.combo)).join("");
     }
 
     function addSelected() {
       const river = document.getElementById("riverSelect").value;
       if (!database[river]) database[river] = [];
 
-      selectedCombos.forEach(c => {
-        database[river].push(c);
-      });
+      selectedCombos.forEach(c => database[river].push(c));
 
       alert(selectedCombos.length + " combinations added to " + river);
       selectedCombos = [];
     }
 
     function downloadCSV() {
-      let csv = "river,right_top,right_bottom,left_top,left_bottom
-";
+      let csv = "river,right_top,right_bottom,left_top,left_bottom,id,banded_on\n";
 
       Object.entries(database).forEach(([river, combos]) => {
         combos.forEach(c => {
           const p = parse(c);
           if (!p || p.length !== 4) return;
-          csv += `${river},${p[0]},${p[1]},${p[2]},${p[3]}
-`;
-        });
-      });
-
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'updated_dataset.csv';
-      a.click();
-
-      URL.revokeObjectURL(url);
-    },${p[0]},${p[1]},${p[2]},${p[3]}\n`;
+          csv += `${river},${p[0]},${p[1]},${p[2]},${p[3]},,\n`;
         });
       });
 
