@@ -5,7 +5,6 @@
   <title>Bird Ring Combination Tool</title>
   <style>
     body { font-family: Arial; padding: 20px; max-width: 900px; }
-    textarea { width: 100%; height: 150px; }
     button { padding: 10px 15px; margin-top: 10px; margin-right: 10px; }
     .result { margin-top: 20px; font-weight: bold; }
     .combo { margin: 5px 0; font-size: 16px; }
@@ -23,21 +22,20 @@
     <option>Trupchun</option>
   </select>
 
-  <h3>Import CSV of ringed birds</h3>
-  <input type="file" id="csvFile" accept=".csv">
-
   <br>
-  <button onclick="loadCSV()">Load CSV</button>
+  <button onclick="loadCSV()">Load CSV (auto)</button>
   <button onclick="findBest()">Best 1</button>
-  <button onclick="generateBatch()">Generate 10</button>
-  <button onclick="downloadResults()">Download Results</button>
+  <button onclick="generateBatch()">Best 10 (variety)</button>
 
   <div class="result" id="output"></div>
 
   <script>
     const colors = ["yellow","white","black","red","pink","violet","green","blue"];
     let database = {};
-    let lastResults = [];
+
+    function cleanRiver(r) {
+      return r?.trim();
+    }
 
     function normalize(combo) {
       return combo.replace(/\s+/g, '').toLowerCase();
@@ -47,35 +45,29 @@
       return normalize(`r(${row.right_top}-${row.right_bottom})l(${row.left_top}-${row.left_bottom})`);
     }
 
-    function loadCSV() {
-      const file = document.getElementById("csvFile").files[0];
-      if (!file) return alert("Please select a CSV file");
+    async function loadCSV() {
+      const response = await fetch("view_dipper_beringt.csv");
+      const text = await response.text();
 
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const text = e.target.result;
-        const lines = text.split("\n");
-        const headers = lines[0].split(",");
+      const lines = text.split("\n");
+      const headers = lines[0].split(",");
 
-        database = {};
+      database = {};
 
-        for (let i = 1; i < lines.length; i++) {
-          const cols = lines[i].split(",");
-          if (cols.length < 5) continue;
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(",");
+        if (cols.length < 5) continue;
 
-          const row = {};
-          headers.forEach((h, idx) => row[h.trim()] = cols[idx]?.trim().toLowerCase());
+        const row = {};
+        headers.forEach((h, idx) => row[h.trim()] = cols[idx]?.trim().toLowerCase());
 
-          const river = row.river?.trim();
-          if (!database[river]) database[river] = [];
+        const river = cleanRiver(row.river);
+        if (!database[river]) database[river] = [];
 
-          database[river].push(toCombo(row));
-        }
+        database[river].push(toCombo(row));
+      }
 
-        document.getElementById("output").textContent = "CSV loaded successfully.";
-      };
-
-      reader.readAsText(file);
+      document.getElementById("output").textContent = "CSV loaded from repo.";
     }
 
     function parse(combo) {
@@ -107,14 +99,8 @@
 
       let score = 0;
 
-      for (let i = 0; i < 4; i++) {
-        if (a[i] === b[i]) score += 3;
-      }
-
-      a.forEach(color => {
-        if (b.includes(color)) score += 1;
-      });
-
+      for (let i = 0; i < 4; i++) if (a[i] === b[i]) score += 3;
+      a.forEach(color => { if (b.includes(color)) score += 1; });
       if (a[0] === b[2] && a[1] === b[3]) score += 2;
       if (a[2] === b[0] && a[3] === b[1]) score += 2;
 
@@ -126,13 +112,12 @@
     }
 
     function formatCombo(combo) {
-      const parts = parse(combo);
-      return `<div class="combo">R: ${colorSpan(parts[0])} - ${colorSpan(parts[1])} | L: ${colorSpan(parts[2])} - ${colorSpan(parts[3])}</div>`;
+      const p = parse(combo);
+      return `<div class="combo">R: ${colorSpan(p[0])}-${colorSpan(p[1])} | L: ${colorSpan(p[2])}-${colorSpan(p[3])}</div>`;
     }
 
-    function findBestCombo(localUsed, allUsed, allCombos) {
-      let bestCombo = null;
-      let bestScore = Infinity;
+    function findCandidates(localUsed, allUsed, allCombos) {
+      let scored = [];
 
       allCombos.forEach(combo => {
         if (allUsed.includes(combo)) return;
@@ -143,13 +128,11 @@
           if (sim > worst) worst = sim;
         });
 
-        if (worst < bestScore) {
-          bestScore = worst;
-          bestCombo = combo;
-        }
+        scored.push({ combo, score: worst });
       });
 
-      return { bestCombo, bestScore };
+      scored.sort((a,b) => a.score - b.score);
+      return scored.slice(0, 50); // top 50 candidates
     }
 
     function findBest() {
@@ -158,14 +141,12 @@
       const localUsed = database[river] || [];
       const allCombos = generateAllCombos();
 
-      const { bestCombo, bestScore } = findBestCombo(localUsed, allUsed, allCombos);
-
-      lastResults = [bestCombo];
+      const candidates = findCandidates(localUsed, allUsed, allCombos);
+      const best = candidates[0];
 
       document.getElementById("output").innerHTML =
-        bestCombo
-          ? `BEST (score ${bestScore}):` + formatCombo(bestCombo)
-          : "No valid combination";
+        best ? `BEST (score ${best.score}):` + formatCombo(best.combo)
+             : "No valid combination";
     }
 
     function generateBatch() {
@@ -174,42 +155,14 @@
       let localUsed = [...(database[river] || [])];
       const allCombos = generateAllCombos();
 
-      let results = [];
+      const candidates = findCandidates(localUsed, allUsed, allCombos);
 
-      for (let i = 0; i < 10; i++) {
-        const { bestCombo } = findBestCombo(localUsed, allUsed, allCombos);
-        if (!bestCombo) break;
-
-        results.push(bestCombo);
-        localUsed.push(bestCombo);
-        allUsed.push(bestCombo);
-      }
-
-      lastResults = results;
+      // pick 10 different good ones (not always same)
+      const shuffled = candidates.sort(() => Math.random() - 0.5);
+      const selected = shuffled.slice(0, 10);
 
       document.getElementById("output").innerHTML =
-        "NEXT 10:<br>" + results.map(r => formatCombo(r)).join("");
-    }
-
-    function downloadResults() {
-      if (lastResults.length === 0) return alert("No results to download");
-
-      let csv = "right_top,right_bottom,left_top,left_bottom\n";
-
-      lastResults.forEach(r => {
-        const p = parse(r);
-        csv += `${p[0]},${p[1]},${p[2]},${p[3]}\n`;
-      });
-
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'new_combinations.csv';
-      a.click();
-
-      URL.revokeObjectURL(url);
+        "10 GOOD OPTIONS:<br>" + selected.map(c => formatCombo(c.combo)).join("");
     }
   </script>
 </body>
