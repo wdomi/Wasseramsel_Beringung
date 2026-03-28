@@ -41,7 +41,10 @@
     function normalize(combo) { return combo.replace(/\s+/g, '').toLowerCase(); }
 
     function toCombo(row) {
+      // ensure correct column names
+      if (!row.right_top || !row.right_bottom || !row.left_top || !row.left_bottom) return null;
       return normalize(`r(${row.right_top}-${row.right_bottom})l(${row.left_top}-${row.left_bottom})`);
+    }-${row.right_bottom})l(${row.left_top}-${row.left_bottom})`);
     }
 
     async function loadCSV() {
@@ -58,12 +61,16 @@
         if (cols.length < 5) continue;
 
         const row = {};
-        headers.forEach((h, idx) => row[h.trim()] = cols[idx]?.trim().toLowerCase());
+        headers.forEach((h, idx) => {
+          const key = h.trim().toLowerCase();
+          row[key] = cols[idx]?.trim().toLowerCase();
+        });
 
         const river = cleanRiver(row.river);
         if (!database[river]) database[river] = [];
 
-        database[river].push(toCombo(row));
+        const combo = toCombo(row);
+        if (combo) database[river].push(combo);
       }
 
       document.getElementById("output").textContent = "CSV loaded.";
@@ -184,12 +191,28 @@
     }
 
     function downloadCSV() {
-      let csv = "river,right_top,right_bottom,left_top,left_bottom\n";
+      let csv = "river,right_top,right_bottom,left_top,left_bottom
+";
 
       Object.entries(database).forEach(([river, combos]) => {
         combos.forEach(c => {
           const p = parse(c);
-          csv += `${river},${p[0]},${p[1]},${p[2]},${p[3]}\n`;
+          if (!p || p.length !== 4) return;
+          csv += `${river},${p[0]},${p[1]},${p[2]},${p[3]}
+`;
+        });
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'updated_dataset.csv';
+      a.click();
+
+      URL.revokeObjectURL(url);
+    },${p[0]},${p[1]},${p[2]},${p[3]}\n`;
         });
       });
 
