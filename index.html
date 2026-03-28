@@ -73,7 +73,8 @@
           if (combo) database[river].push(combo);
         }
 
-        document.getElementById("output").textContent = "CSV loaded successfully.";
+        const total = Object.values(database).reduce((sum, arr) => sum + arr.length, 0);
+        document.getElementById("output").textContent = `CSV loaded successfully. (${total} birds loaded)`;
       } catch (e) {
         document.getElementById("output").textContent = "Error loading CSV (check path or run via server).";
       }
