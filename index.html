@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Bird Ring Combination Tool</title>
+  <style>
+    body { font-family: Arial; padding: 20px; max-width: 900px; }
+    button { padding: 10px 15px; margin-top: 10px; margin-right: 10px; }
+    .result { margin-top: 20px; font-weight: bold; }
+    .combo { margin: 5px 0; font-size: 16px; }
+  </style>
+</head>
+<body>
+
+<h2>Bird Ring Combination Tool (Advanced)</h2>
+
+<label>Select River:</label>
+<select id="riverSelect">
+  <option>Untere Spöl</option>
+  <option>Obere Spöl</option>
+  <option>Ova dal Fuorn</option>
+  <option>Rom</option>
+  <option>Trupchun</option>
+</select>
+
+<br>
+<button onclick="loadCSV()">Load CSV (auto)</button>
+<button onclick="findBest()">Best 1</button>
+<button onclick="generateBatch()">Best 10</button>
+<button onclick="addSelected()">Add selected</button>
+<button onclick="downloadCSV()">Download CSV</button>
+<button onclick="showData()">Show loaded birds</button>
+
+<div class="result" id="output"></div>
+
+<script>
+const colors = ["yellow","white","black","red","pink","violet","green","blue"];
+let database = {};
+let selectedCombos = [];
+
+function cleanRiver(r){ return r?.trim(); }
+function normalize(c){ return c.replace(/\s+/g,'').toLowerCase(); }
+
+function toCombo(row){
+  if(!row.right_top || !row.right_bottom || !row.left_top || !row.left_bottom) return null;
+  return normalize(`r(${row.right_top}-${row.right_bottom})l(${row.left_top}-${row.left_bottom})`);
+}
+
+
+async function loadCSV(){
+  try{
+    const res = await fetch("./view_dipper_beringt.csv");
+    let text = await res.text();
+
+    text = text.replace(/^\uFEFF/, '');
+
+    const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
+    if(lines.length === 0){
+      document.getElementById("output").textContent = "CSV empty";
+      return;
+    }
+
+    function parseCSVLine(line){
+      const result = [];
+      let current = "";
+      let inQuotes = false;
+
+      for(let i=0;i<line.length;i++){
+        const char = line[i];
+
+        if(char === '"'){
+          inQuotes = !inQuotes;
+        }
+        else if(char === ',' && !inQuotes){
+          result.push(current.trim().toLowerCase());
+          current = "";
+        }
+        else{
+          current += char;
+        }
+      }
+
+      result.push(current.trim().toLowerCase());
+      return result;
+    }
+
+    const headers = parseCSVLine(lines[0]);
+
+    database = {};
+
+    for(let i=1;i<lines.length;i++){
+      const cols = parseCSVLine(lines[i]);
+      if(cols.length < 5) continue;
+
+      const row = {};
+      headers.forEach((h,idx)=> row[h] = cols[idx]);
+
+      const river = row["river"];
+      if(!river || river === "null") continue;
+
+      const combo = toCombo(row);
+      if(!combo) continue;
+
+      if(!database[river]) database[river]=[];
+      database[river].push(combo);
+    }
+
+    let total=0;
+    let txt="CSV loaded:<br>";
+
+    Object.entries(database).forEach(([r,a])=>{
+      total+=a.length;
+      txt+=`${r}: ${a.length}<br>`;
+    });
+
+    txt+=`<b>TOTAL: ${total}</b>`;
+
+    document.getElementById("output").innerHTML = txt;
+
+  }catch(e){
+    console.error(e);
+    document.getElementById("output").textContent = "LOAD FAILED";
+  }
+}
+  
+
+
+
+  
+
+function parse(c){
+  return c.match(/\((.*?)\)/g)
+    .map(x=>x.replace(/[()]/g,'').split('-')).flat();
+}
+
+function generateAllCombos(){
+  const out=[];
+  for(let r1 of ["alu",...colors])
+  for(let r2 of colors)
+  for(let l1 of colors)
+  for(let l2 of colors){
+    const arr=[r1,r2,l1,l2];
+    if(arr.filter(x=>x==="alu").length!==1) continue;
+    out.push(`r(${r1}-${r2})l(${l1}-${l2})`);
+  }
+  return out;
+}
+
+function similarity(a,b){
+  const x=parse(a), y=parse(b);
+  let s=0;
+  for(let i=0;i<4;i++) if(x[i]===y[i]) s+=3;
+  x.forEach(c=>{ if(y.includes(c)) s+=1; });
+  if(x[0]===y[2] && x[1]===y[3]) s+=2;
+  if(x[2]===y[0] && x[3]===y[1]) s+=2;
+  return s;
+}
+
+function colorSpan(c){
+  return `<span style="color:${c==='white'?'#999':c}">${c.toUpperCase()}</span>`;
+}
+
+function formatCombo(c){
+  const p=parse(c);
+  return `<div class="combo">
+    <input type="checkbox" onchange="toggleSelect('${c}',this.checked)">
+    R: ${colorSpan(p[0])}-${colorSpan(p[1])} | L: ${colorSpan(p[2])}-${colorSpan(p[3])}
+  </div>`;
+}
+
+function toggleSelect(c,checked){
+  if(checked) selectedCombos.push(c);
+  else selectedCombos = selectedCombos.filter(x=>x!==c);
+}
+
+function findCandidates(local,all,combos){
+  let scored=[];
+  combos.forEach(c=>{
+    if(all.includes(c)) return;
+    let worst=0;
+    local.forEach(e=>{
+      const sim=similarity(c,e);
+      if(sim>worst) worst=sim;
+    });
+    scored.push({combo:c,score:worst});
+  });
+  scored.sort((a,b)=>a.score-b.score);
+  return scored.slice(0,50);
+}
+
+function findBest(){
+  const river=document.getElementById("riverSelect").value;
+  const all=Object.values(database).flat();
+  const local=database[river]||[];
+
+  const c=findCandidates(local,all,generateAllCombos());
+
+  document.getElementById("output").innerHTML =
+    "BEST OPTIONS:<br>" + c.slice(0,5).map(x=>formatCombo(x.combo)).join("");
+}
+
+function generateBatch(){
+  const river=document.getElementById("riverSelect").value;
+  const all=Object.values(database).flat();
+  const local=database[river]||[];
+
+  const c=findCandidates(local,all,generateAllCombos());
+  const pick=c.sort(()=>Math.random()-0.5).slice(0,10);
+
+  document.getElementById("output").innerHTML =
+    "10 OPTIONS:<br>" + pick.map(x=>formatCombo(x.combo)).join("");
+}
+
+function addSelected(){
+  const river=document.getElementById("riverSelect").value;
+  if(!database[river]) database[river]=[];
+
+  selectedCombos.forEach(c=>database[river].push(c));
+
+  alert(selectedCombos.length + " added");
+  selectedCombos=[];
+}
+
+function downloadCSV(){
+  let csv="river,right_top,right_bottom,left_top,left_bottom,id,banded_on\n";
+
+  Object.entries(database).forEach(([r,arr])=>{
+    arr.forEach(c=>{
+      const p=parse(c);
+      if(p.length!==4) return;
+      csv+=`${r},${p[0]},${p[1]},${p[2]},${p[3]},,\n`;
+    });
+  });
+
+  const blob=new Blob([csv],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='updated_dataset.csv';
+  a.click();
+
+  URL.revokeObjectURL(url);
+}
+
+function showData(){
+  let txt="";
+  Object.entries(database).forEach(([r,arr])=>{
+    txt+=r+"\n";
+    arr.forEach(c=> txt+="  "+c+"\n");
+  });
+  if(!txt) txt="No data loaded";
+  alert(txt);
+}
+</script>
+
+</body>
+</html>
