@@ -102,7 +102,11 @@ async function loadCSV(){
       if(!combo) continue;
 
       if(!database[river]) database[river]=[];
-      database[river].push(combo);
+      database[river].push({
+        combo: combo,
+        id: row["id"] || "",
+        banded_on: row["banded_on"] || ""
+      });;
     }
 
     let total=0;
@@ -190,8 +194,8 @@ function findCandidates(local,all,combos){
 
 function findBest(){
   const river=document.getElementById("riverSelect").value;
-  const all=Object.values(database).flat();
-  const local=database[river]||[];
+  const all = Object.values(database).flat().map(x => x.combo);
+const local = (database[river] || []).map(x => x.combo);
 
   const c=findCandidates(local,all,generateAllCombos());
 
@@ -201,8 +205,8 @@ function findBest(){
 
 function generateBatch(){
   const river=document.getElementById("riverSelect").value;
-  const all=Object.values(database).flat();
-  const local=database[river]||[];
+  const all = Object.values(database).flat().map(x => x.combo);
+const local = (database[river] || []).map(x => x.combo);
 
   const c=findCandidates(local,all,generateAllCombos());
   const pick=c.sort(()=>Math.random()-0.5).slice(0,10);
@@ -215,8 +219,15 @@ function addSelected(){
   const river=document.getElementById("riverSelect").value;
   if(!database[river]) database[river]=[];
 
-  selectedCombos.forEach(c=>database[river].push(c));
+selectedCombos.forEach(c => {
+  database[river].push({
+    combo: c,
+    id: "",
+    banded_on: ""
+  });
+});
 
+  
   alert(selectedCombos.length + " added");
   selectedCombos=[];
 }
@@ -225,10 +236,11 @@ function downloadCSV(){
   let csv="river,right_top,right_bottom,left_top,left_bottom,id,banded_on\n";
 
   Object.entries(database).forEach(([r,arr])=>{
-    arr.forEach(c=>{
-      const p=parse(c);
+    arr.forEach(obj=>{
+      const p=parse(obj.combo);
       if(p.length!==4) return;
-      csv+=`${r},${p[0]},${p[1]},${p[2]},${p[3]},,\n`;
+
+      csv+=`${r},${p[0]},${p[1]},${p[2]},${p[3]},${obj.id || ""},${obj.banded_on || ""}\n`;
     });
   });
 
