@@ -257,10 +257,24 @@ function downloadCSV(){
 
 function showData(){
   let txt="";
+  
   Object.entries(database).forEach(([r,arr])=>{
-    txt+=r+"\n";
-    arr.forEach(c=> txt+="  "+c+"\n");
+    txt += r + "\n";
+    
+    arr.forEach(obj=>{
+      const p = parse(obj.combo);
+      if(p.length !== 4) return;
+
+      txt += `  r(${p[0]}-${p[1]})l(${p[2]}-${p[3]})`;
+      
+      if(obj.id || obj.banded_on){
+        txt += ` | id: ${obj.id || "-"} | banded_on: ${obj.banded_on || "-"}`;
+      }
+      
+      txt += "\n";
+    });
   });
+
   if(!txt) txt="No data loaded";
   alert(txt);
 }
