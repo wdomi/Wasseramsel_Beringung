@@ -139,16 +139,25 @@ function parse(c){
 
 function generateAllCombos(){
   const out=[];
-  for(let r1 of ["alu",...colors])
-  for(let r2 of colors)
-  for(let l1 of colors)
-  for(let l2 of colors){
+  const allColors = ["alu", ...colors]; // <- allow alu everywhere
+
+  for(let r1 of allColors)
+  for(let r2 of allColors)
+  for(let l1 of allColors)
+  for(let l2 of allColors){
+
     const arr=[r1,r2,l1,l2];
-    if(arr.filter(x=>x==="alu").length!==1) continue;
+
+    // exactly ONE alu ring
+    if(arr.filter(x=>x==="alu").length !== 1) continue;
+
     out.push(`r(${r1}-${r2})l(${l1}-${l2})`);
   }
+
   return out;
 }
+
+  
 
 function similarity(a,b){
   const x=parse(a), y=parse(b);
